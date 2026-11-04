@@ -99,7 +99,7 @@ function panel() {
     data.price=Number(data.price);
     const button=add.querySelector('button');button.disabled=true;
     try{
-      const r=await fetch('/admin/products',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+      const r=await fetch('/admin?action=products',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
       if(!r.ok)throw Error(r.status===409?'Ya existe una prenda con ese nombre.':'No se pudo guardar la prenda.');
       await load(data.name.trim());add.reset();status.textContent='Prenda agregada. Ya podés subir su primera foto.';
     }catch(error){status.textContent=error.message;}finally{button.disabled=false;}
@@ -115,7 +115,7 @@ function panel() {
     color.onchange();
   }
   async function load(name=entries[product.value]?.name, selectedColor=color.value) {
-    const response=await fetch('/admin/photos');
+    const response=await fetch('/admin?action=photos');
     if(!response.ok) throw Error('No se pudo cargar el catálogo. Recargá la página para volver a intentar.');
     ({products:entries,photos:published}=await response.json());
     product.replaceChildren(...entries.map((p,i)=>new Option(p.name,i)));
@@ -139,24 +139,25 @@ function panel() {
       canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);img.close();
       const image=canvas.toDataURL('image/webp',.7);
       if(!image.startsWith('data:image/webp;')||image.length>420000)throw Error('No se pudo comprimir la foto. Probá con una imagen JPG más pequeña.');
-      const response=await fetch('/admin/photos',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({product:selected,color:shade,image})});
+      const response=await fetch('/admin?action=photos',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({product:selected,color:shade,image})});
       if(!response.ok)throw Error('No se pudo guardar la foto. Verificá tu sesión y volvé a intentar.');
       photo.value='';shadeInput.value='';await load(selected,shade);status.textContent='Foto publicada.';
     } catch(error){status.textContent=error.message;}
     finally{button.disabled=product.disabled=color.disabled=photo.disabled=false;}
   };
-  load().catch(error=>status.textContent=error.message);
+  load().then(()=>status.textContent='').catch(error=>status.textContent=error.message);
 }
-const page = '<!doctype html><html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Fotos · Esencia Vestuario</title><style>body{margin:35px auto;padding:0 18px;max-width:520px;background:#fff5f8;color:#412438;font:17px system-ui}form{border:1px solid #edcbdc;border-radius:18px;background:#fff;padding:18px}label{display:block;margin:12px 0}[hidden]{display:none!important}details{margin-top:18px}select,input,button{display:block;max-width:100%;font:inherit;padding:8px;margin-top:5px}button{background:#842f59;color:white;border:0;border-radius:10px;padding:10px 16px}img{max-width:180px;border-radius:12px}a{color:#842f59}</style><h1>Fotos del catálogo</h1><p>Esencia Vestuario · <a href="/">Ver tienda</a> · <a href="/cdn-cgi/access/logout">Cerrar sesión</a></p><form id="form"><label>Prenda<select id="product" required></select></label><label>Color<select id="color" required></select></label><label id="extra" hidden>Nombre del color<input id="shade" maxlength="40"></label><img id="preview" alt="Foto publicada" hidden><label>Nueva foto<input type="file" id="photo" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" required></label><button id="save" disabled>Publicar foto</button><p id="status" role="status"></p></form><details><summary>Agregar prenda</summary><form id="add-product"><label>Nombre<input name="name" maxlength="100" required></label><label>Colección<input name="group" maxlength="80" required></label><label>Precio en colones<input name="price" type="number" min="0" max="10000000" required></label><label>Descripción<input name="description" maxlength="500"></label><button>Agregar prenda</button></form></details><script src="/admin/script.js" defer></script></html>';
+const page = '<!doctype html><html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Fotos · Esencia Vestuario</title><style>body{margin:35px auto;padding:0 18px;max-width:520px;background:#fff5f8;color:#412438;font:17px system-ui}form{border:1px solid #edcbdc;border-radius:18px;background:#fff;padding:18px}label{display:block;margin:12px 0}[hidden]{display:none!important}details{margin-top:18px}select,input,button{display:block;max-width:100%;font:inherit;padding:8px;margin-top:5px}button{background:#842f59;color:white;border:0;border-radius:10px;padding:10px 16px}img{max-width:180px;border-radius:12px}a{color:#842f59}</style><h1>Fotos del catálogo</h1><p>Esencia Vestuario · <a href="/">Ver tienda</a> · <a href="/cdn-cgi/access/logout">Cerrar sesión</a></p><form id="form"><label>Prenda<select id="product" required></select></label><label>Color<select id="color" required></select></label><label id="extra" hidden>Nombre del color<input id="shade" maxlength="40"></label><img id="preview" alt="Foto publicada" hidden><label>Nueva foto<input type="file" id="photo" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" required></label><button id="save" disabled>Publicar foto</button><p id="status" role="status">Cargando prendas y colores…</p></form><details><summary>Agregar prenda</summary><form id="add-product"><label>Nombre<input name="name" maxlength="100" required></label><label>Colección<input name="group" maxlength="80" required></label><label>Precio en colones<input name="price" type="number" min="0" max="10000000" required></label><label>Descripción<input name="description" maxlength="500"></label><button>Agregar prenda</button></form></details><script src="/admin?action=script" defer></script></html>';
 const index = db => db.prepare('SELECT id,product,color,updated FROM catalog_photos ORDER BY id').all().then(r=>r.results);
 export default {async fetch(request, env) {
   const url=new URL(request.url), path=url.pathname, method=request.method, db=env.CATALOG_DB;
+  const action=url.searchParams.get('action');
   try {
     if(path==='/admin'||path.startsWith('/admin/')) {
       if(url.origin!==site||!await authorized(request))return json({error:'Acceso restringido'},403);
-      if(method==='GET'&&(path==='/admin'||path==='/admin/'))return new Response(page,{headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Frame-Options':'DENY'}});
-      if(path==='/admin/script.js'&&method==='GET')return new Response('('+panel.toString()+')()', {headers:{'Content-Type':'application/javascript','Cache-Control':'no-store'}});
-      if(path==='/admin/products'&&method==='POST'&&request.headers.get('Origin')===site&&request.headers.get('Content-Type')==='application/json'){
+      if(method==='GET'&&!action&&(path==='/admin'||path==='/admin/'))return new Response(page,{headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Frame-Options':'DENY'}});
+      if(action==='script'&&method==='GET')return new Response('('+panel.toString()+')()', {headers:{'Content-Type':'application/javascript','Cache-Control':'no-store'}});
+      if(action==='products'&&method==='POST'&&request.headers.get('Origin')===site&&request.headers.get('Content-Type')==='application/json'){
         const payload=await request.text();
         if(payload.length>5000)return json({error:'Datos inválidos'},400);
         let data;try{data=JSON.parse(payload);}catch{return json({error:'Datos inválidos'},400);}
@@ -167,8 +168,8 @@ export default {async fetch(request, env) {
         await db.prepare('INSERT INTO products(id,name,collection,price,description) VALUES(?,?,?,?,?)').bind('added:'+name.toLowerCase(),name,group,data.price,description).run();
         return json({ok:true},201);
       }
-      if(path==='/admin/photos'&&method==='GET')return json({products:await products(db),photos:await index(db)});
-      if(path==='/admin/photos'&&method==='PUT'&&request.headers.get('Origin')===site&&request.headers.get('Content-Type')==='application/json'){
+      if(action==='photos'&&method==='GET')return json({products:await products(db),photos:await index(db)});
+      if(action==='photos'&&method==='PUT'&&request.headers.get('Origin')===site&&request.headers.get('Content-Type')==='application/json'){
         if(Number(request.headers.get('Content-Length'))>425000)return json({error:'Imagen demasiado grande'},413);
         const body=await request.text();
         if(body.length>425000)return json({error:'Imagen demasiado grande'},413);
